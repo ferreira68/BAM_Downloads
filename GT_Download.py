@@ -6,6 +6,7 @@
 #            University of Pittsburgh
 # Date     : 22 Aug 14
 # Modified : 10 Oct 14
+# Now moved to github
 
 import time
 import sys
