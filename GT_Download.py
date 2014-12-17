@@ -579,6 +579,11 @@ for bam in SourceList:
     elif verbose:
         print ("This location/availability of this file is unknown. Status = %s") % bam.status
 
+    if direct_mode:
+        UpdateRequestsFile(RequestsFileName,bam.name,num_columns,\
+                           column_names.index('pgrr_file_path'),\
+                           os.path.dirname(bam.localname))
+    
     if (bam.status == "Staged" and not direct_mode):
         # Perform an md5sum on the file and compare to BAMinfo
         if verbose:
