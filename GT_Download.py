@@ -22,7 +22,7 @@ Bytes2GB    = 1073741824
 TimeFormat  = '%m/%d/%y %I:%M %p'
 final_dest  = "/supercell/tcga"
 exit_code   = 0
-debug       = 0
+debug       = 1
 direct_mode = 1
 
 # Default values
@@ -40,10 +40,17 @@ request_file_name     = "bam_status.tsv"
 # For debugging we'll use local files and directories
 #
 if debug:
-    CredentialFile    = "/arc/users/aferreir/BAM_download/Olgas.key"
+    # For running on firehose6 at PSC
+    # CredentialFile    = "/arc/users/aferreir/BAM_download/Olgas.key"
+    # final_dest        = "/supercell2/users/aferreir"
+
+    # For running on corelli.sam.pitt.edu
+    CredentialFile    = "/home/tony/Documents/Research/PGRR/BAM_Downloads/Olgas.key"
+    final_dest        = "/home/tony/Documents/Research/PGRR/BAM_Downloads/DownloadDir"
+    num_children      = 6
+
     request_file_dir  = "."
     request_file_name = "test.tsv"
-    final_dest        = "/supercell2/users/aferreir"
     verbose           = 1
 ########################################################
 
@@ -447,6 +454,8 @@ for bam in SourceList:
         UpdateRequestsFile(RequestsFileName,bam.name,num_columns,\
                            column_names.index('status'),bam.status)
         bam.start_time = datetime.now()
+        # A little user output for the log file
+        print (" --- Starting download at %s") % (bam.start_time.strftime(TimeFormat))
         UpdateRequestsFile(RequestsFileName,bam.name,num_columns,\
                            column_names.index('start_time'),\
                            bam.start_time.strftime(TimeFormat))
@@ -454,6 +463,7 @@ for bam in SourceList:
                                       stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
         if verbose:
             print (">>>>>> %s output:") % GeneTorrentExecutable
+            # A little user output for the log file
         while (gt_process.poll()  == None):
             out = gt_process.stdout.readline()
             if out == '':
@@ -505,6 +515,9 @@ for bam in SourceList:
             else:
                 sys.stdout.write(">>>>>> " + out)
                 sys.stdout.flush()
+
+    # A little user output for the log file
+    print (" --- Finished download at %s") % (bam.end_time.strftime(TimeFormat))
 
     # How long did this take?
     elapsed = bam.end_time - bam.start_time
