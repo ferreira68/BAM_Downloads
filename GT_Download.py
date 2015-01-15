@@ -5,8 +5,16 @@
 #            Center for Simulation and Modeling
 #            University of Pittsburgh
 # Date     : 22 Aug 14
-# Modified : 10 Oct 14
+# Modified : 15 Jan 15
 # Now moved to github
+#
+# Things to do:
+#
+#  1) In direct mode, make limiting the download speed to disk speed optional
+#  2) Make the disk speed check a function and call it periodically to adjust
+#     for I/O load
+#  3) Build in logic for handling more than one file per CGHub UUID
+#
 
 import time
 import sys
@@ -119,7 +127,7 @@ def UpdateRequestsFile(filename,bamname,num_cols,col_index,newdata):
     # A function for updating the .tsv file
     import tempfile,shutil
 
-    BUFFER_SIZE = 1048576 # 1 MB should be enough for now
+    BUFFER_SIZE = 10485760 # 10 MB should be enough (for now)
 
     tmp = tempfile.SpooledTemporaryFile(bufsize=BUFFER_SIZE)
     f = open(filename,'r')
@@ -142,6 +150,9 @@ def UpdateRequestsFile(filename,bamname,num_cols,col_index,newdata):
     for line in tmp:
         f.write(line)
     f.close()
+    # Use flush + fsync to ensure that we have committed the update to disk
+    f.flush()
+    os.fsync(f.fileno())
     tmp.close()
 
 # Get the start time for the script
