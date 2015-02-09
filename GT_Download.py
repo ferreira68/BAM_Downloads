@@ -123,7 +123,7 @@ def usage():
 
 
 
-def UpdateRequestsFile(filename,bamname,num_cols,col_index,newdata):
+def UpdateRequestsFile(filename,ref_col_index,ref_col_data,num_cols,col_index,newdata):
     # A function for updating the .tsv file
     import tempfile,shutil
 
@@ -138,7 +138,12 @@ def UpdateRequestsFile(filename,bamname,num_cols,col_index,newdata):
         if len(data) < num_cols:
             for i in range(len(data),(num_cols+1)):
                 data.append("")
-        if data[13] == bamname:
+        if data[ref_col_index] == ref_col_data:
+            if debug:
+                print ("DEBUG: from UpdateRequestsFile: Updating column %d in %s") % (col_index,filename)
+                print ("DEBUG: from UpdateRequestsFile: column heading = %s") % column_names[col_index]
+                print ("DEBUG: from UpdateRequestsFile: old value      = %s") % data[col_index]
+                print ("DEBUG: from UpdateRequestsFile: new value      = %s") % newdata
             data[col_index] = newdata
             line = '\t'.join(data)
             line = line + '\n'
@@ -149,10 +154,10 @@ def UpdateRequestsFile(filename,bamname,num_cols,col_index,newdata):
     f = open(filename,'w')
     for line in tmp:
         f.write(line)
-    f.close()
     # Use flush + fsync to ensure that we have committed the update to disk
     f.flush()
     os.fsync(f.fileno())
+    f.close()
     tmp.close()
 
 # Get the start time for the script
@@ -291,6 +296,12 @@ for line in RequestsFile:
     if len(data) < num_columns:
         for i in range(len(data),(num_columns+1)):
             data.append("")
+    if debug:
+        print "TSV Column Name       :"
+        print "------------------------------------------------------------------"
+        for i in range(len(column_names)):
+            print ("%-22s:  %s") % (column_names[i],data[i])
+        print ""
     filename = data[column_names.index('filename')]
     BAM_UUID = data[column_names.index('analysis_id')]
     filesize = int(float(data[column_names.index('files_size')]))
@@ -432,13 +443,13 @@ for bam in SourceList:
             bam.status = cgquery_out[state_loc:].split()[1]
             if debug:
                 print ("DEBUG: bam.status = %s") % bam.status
-            UpdateRequestsFile(RequestsFileName,bam.name,num_columns,\
+            UpdateRequestsFile(RequestsFileName,column_names.index('analysis_id'),bam.uuid,num_columns,\
                                column_names.index('status'),bam.status)
-            UpdateRequestsFile(RequestsFileName,bam.name,num_columns,\
+            UpdateRequestsFile(RequestsFileName,column_names.index('analysis_id'),bam.uuid,num_columns,\
                                column_names.index('state'),bam.status)
             do_download = 0
         else:
-            UpdateRequestsFile(RequestsFileName,bam.name,num_columns,\
+            UpdateRequestsFile(RequestsFileName,column_names.index('analysis_id'),bam.uuid,num_columns,\
                                column_names.index('state'),"Live")
             if verbose:
                 print ("UUID %s is in a downloadable state.") % bam.uuid
@@ -458,16 +469,16 @@ for bam in SourceList:
             sys.stdout.flush()
 
         attempt += 1
-        UpdateRequestsFile(RequestsFileName,bam.name,num_columns,\
+        UpdateRequestsFile(RequestsFileName,column_names.index('analysis_id'),bam.uuid,num_columns,\
                            column_names.index('download_attempt_num'),\
                            str(attempt))
         bam.status = "InProcess"
-        UpdateRequestsFile(RequestsFileName,bam.name,num_columns,\
+        UpdateRequestsFile(RequestsFileName,column_names.index('analysis_id'),bam.uuid,num_columns,\
                            column_names.index('status'),bam.status)
         bam.start_time = datetime.now()
         # A little user output for the log file
         print (" --- Starting download at %s") % (bam.start_time.strftime(TimeFormat))
-        UpdateRequestsFile(RequestsFileName,bam.name,num_columns,\
+        UpdateRequestsFile(RequestsFileName,column_names.index('analysis_id'),bam.uuid,num_columns,\
                            column_names.index('start_time'),\
                            bam.start_time.strftime(TimeFormat))
         gt_process = subprocess.Popen(gt_command, shell=True, bufsize=1,\
@@ -486,7 +497,7 @@ for bam in SourceList:
                     if (gt_process.returncode == 0 and os.path.exists(cached_name)):
                         do_download = 0
                         bam.end_time = datetime.now()
-                        UpdateRequestsFile(RequestsFileName,bam.name,num_columns,\
+                        UpdateRequestsFile(RequestsFileName,column_names.index('analysis_id'),bam.uuid,num_columns,\
                                            column_names.index('end_time'),\
                                            bam.end_time.strftime(TimeFormat))
                         if direct_mode:
@@ -501,14 +512,14 @@ for bam in SourceList:
                                 print ("DEBUG: Getting size of %s") % cached_name
                             bam.size = os.path.getsize(cached_name)
                             total_download_size += bam.size
-                        UpdateRequestsFile(RequestsFileName,bam.name,num_columns,\
+                        UpdateRequestsFile(RequestsFileName,column_names.index('analysis_id'),bam.uuid,num_columns,\
                                            column_names.index('files_size'),\
                                            str(bam.size))
                         if direct_mode:
                             bam.status = "Finished"
                         else:
                             bam.status = "Cached"
-                        UpdateRequestsFile(RequestsFileName,bam.name,num_columns,\
+                        UpdateRequestsFile(RequestsFileName,column_names.index('analysis_id'),bam.uuid,num_columns,\
                                            column_names.index('status'),\
                                            bam.status)
                         break
@@ -516,11 +527,11 @@ for bam in SourceList:
                         print ("\nERROR: Download process failed with exit code %d.  Retrying.  (Attempt %d of %d)\n\n") % \
                               (gt_process.returncode,(attempt+1),MAX_ATTEMPTS)
                         bam.end_time = datetime.now()
-                        UpdateRequestsFile(RequestsFileName,bam.name,num_columns,\
+                        UpdateRequestsFile(RequestsFileName,column_names.index('analysis_id'),bam.uuid,num_columns,\
                                            column_names.index('end_time'),\
                                            bam.end_time.strftime(TimeFormat))
                         bam.status = "Failed"
-                        UpdateRequestsFile(RequestsFileName,bam.name,num_columns,\
+                        UpdateRequestsFile(RequestsFileName,column_names.index('analysis_id'),bam.uuid,num_columns,\
                                            column_names.index('status'),\
                                            bam.status)
             else:
@@ -554,7 +565,7 @@ for bam in SourceList:
         data_rate = float(bam.size/Bytes2MB) / (bam.end_time - bam.start_time).seconds
     if verbose:
         print (" --- Calculated data rate = %.1f MB/s") % data_rate
-    UpdateRequestsFile(RequestsFileName,bam.name,num_columns,\
+    UpdateRequestsFile(RequestsFileName,column_names.index('analysis_id'),bam.uuid,num_columns,\
                        column_names.index('overall_rate_(MB/s)'),str(data_rate))
 
     if (bam.status == "Cached" and not direct_mode):
@@ -583,9 +594,9 @@ for bam in SourceList:
             print ("ERROR: Failed on shell command '%s'") % copycmd
             sys.stdout.flush()
         bam.status = "Staged"
-        UpdateRequestsFile(RequestsFileName,bam.name,num_columns,\
+        UpdateRequestsFile(RequestsFileName,column_names.index('analysis_id'),bam.uuid,num_columns,\
                            column_names.index('status'),bam.status)
-        UpdateRequestsFile(RequestsFileName,bam.name,num_columns,\
+        UpdateRequestsFile(RequestsFileName,column_names.index('analysis_id'),bam.uuid,num_columns,\
                            column_names.index('pgrr_file_path'),\
                            os.path.dirname(bam.localname))
         elapsed_copy = copy_end - copy_start
@@ -604,7 +615,7 @@ for bam in SourceList:
         print ("This location/availability of this file is unknown. Status = %s") % bam.status
 
     if direct_mode:
-        UpdateRequestsFile(RequestsFileName,bam.name,num_columns,\
+        UpdateRequestsFile(RequestsFileName,column_names.index('analysis_id'),bam.uuid,num_columns,\
                            column_names.index('pgrr_file_path'),\
                            os.path.dirname(bam.localname))
     
@@ -640,20 +651,20 @@ for bam in SourceList:
             print ("ERROR:   - Reference  = %s") % bam.checksum
             print ("ERROR:   - Calculated = %s") % my_md5
             bam.status = "Failed"
-            UpdateRequestsFile(RequestsFileName,bam.name,num_columns,\
+            UpdateRequestsFile(RequestsFileName,column_names.index('analysis_id'),bam.uuid,num_columns,\
                                column_names.index('status'),bam.status)
-            UpdateRequestsFile(RequestsFileName,bam.name,num_columns,\
+            UpdateRequestsFile(RequestsFileName,column_names.index('analysis_id'),bam.uuid,num_columns,\
                                column_names.index('end_time'),"")
             exit_code = 5
             sys.stdout.flush()
             # sys.exit(exit_code)
         else:
             bam.status = "Finished"
-            UpdateRequestsFile(RequestsFileName,bam.name,num_columns,\
+            UpdateRequestsFile(RequestsFileName,column_names.index('analysis_id'),bam.uuid,num_columns,\
                                column_names.index('status'),bam.status)
             data_rate = float((bam.size / (md5_end - start_time).seconds)/Bytes2MB)
             download_speed = "%.2f" % data_rate
-            UpdateRequestsFile(RequestsFileName,bam.name,num_columns,\
+            UpdateRequestsFile(RequestsFileName,column_names.index('analysis_id'),bam.uuid,num_columns,\
                                column_names.index('overall_rate_(MB/s)'),\
                                download_speed)
             if verbose:
