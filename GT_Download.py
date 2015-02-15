@@ -41,6 +41,7 @@ CredentialFile        = "/arc/users/omedvede/bams_private/cghub.key"
 MAX_WAIT              = 10
 num_children          = 24
 max_bandwidth         = 10000
+do_speedtest          = 0
 local_dir             = "/tmp"
 request_file_dir      = "/supercell/bam_requests"
 request_file_name     = "bam_status.tsv"
@@ -118,6 +119,7 @@ def usage():
     print "  -l DIR           local directory to use for initial download (default = %s)" % local_dir
     print "  -t DIR           Target DIR for downloaded files (default = %s)" % final_dest
     print "  -D               Turn off DIRECT download mode (i.e. - cache to local directory first)"
+    print "  -S               Automatically adjust download speed to match disk speed"
     print "  -v               Verbose mode"
     print "  -h               Show this help message\n\n"
 
@@ -160,6 +162,33 @@ def UpdateRequestsFile(filename,ref_col_index,ref_col_data,num_cols,col_index,ne
     f.close()
     tmp.close()
 
+
+def disk_speedtest(target_dir):
+    if verbose:
+        print ("Running filesystem speed test for target directory (%s)") % target_dir
+        sys.stdout.flush()
+    speedcmd = "dd if=/dev/zero of=%s/GT_Download.speedtest bs=4k count=75000 conv=fdatasync" % target_dir
+    if debug:
+        print ("DEBUG: speedcmd = %s") % speedcmd
+        sys.stdout.flush()
+    cmd = subprocess.Popen(speedcmd, shell=True, bufsize=1,\
+                           stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+    speedout,speederr = cmd.communicate()
+    os.remove(target_dir + "/GT_Download.speedtest")
+    if cmd.returncode != 0:
+        print ("ERROR: Failed on shell command '%s'") % mkdircmd
+        sys.stdout.flush()
+    else:
+        test_bandwidth = int(float(speederr.split()[len(speederr.split())-2]))
+        speed_units = speederr.split()[len(speederr.split())-1]
+        if speed_units == "GB/s":
+            test_bandwidth = test_bandwidth * 1000
+        if debug:
+            print ("DEBUG: speederr = %s") % speederr
+            print ("DEBUG: filesystem bandwidth = %s") % test_bandwidth
+    return test_bandwidth
+
+
 # Get the start time for the script
 script_start_time = datetime.now()
 
@@ -187,6 +216,8 @@ for opt, arg in options:
         final_dest = os.path.abspath(arg)
     elif opt == '-D':
         direct_mode = 0
+    elif opt == '-S':
+        do_speedtest = 1
     elif opt == '-v':
         verbose = 1
     elif opt == '-h':
@@ -252,37 +283,15 @@ if not(os.access(final_dest, os.W_OK)):
     exit_code = 10
     sys.exit(exit_code)
 
-# If we're running in direct mode, test the underlying filesystem and reduce the
-# download speed to match the filesystem
-if direct_mode:
-    if verbose:
-        print ("Running filesystem speed test for target directory (%s)") % final_dest
-        sys.stdout.flush()
-    speedcmd = "dd if=/dev/zero of=%s/GT_Download.speedtest bs=4k count=75000 conv=fdatasync" % final_dest
-    if debug:
-        print ("DEBUG: speedcmd = %s") % speedcmd
-        sys.stdout.flush()
-    cmd = subprocess.Popen(speedcmd, shell=True, bufsize=1,\
-                           stdout=subprocess.PIPE,stderr=subprocess.PIPE)
-    speedout,speederr = cmd.communicate()
-    os.remove(final_dest + "/GT_Download.speedtest")
-    if cmd.returncode != 0:
-        print ("ERROR: Failed on shell command '%s'") % mkdircmd
-        sys.stdout.flush()
-    else:
-        test_bandwidth = int(float(speederr.split()[len(speederr.split())-2]))
-        speed_units = speederr.split()[len(speederr.split())-1]
-        if speed_units == "GB/s":
-            test_bandwidth = test_bandwidth * 1000
-        if debug:
-            print ("DEBUG: speederr = %s") % speederr
-            print ("DEBUG: filesystem bandwidth = %s") % test_bandwidth
-        if test_bandwidth < max_bandwidth:
-            if verbose:
-                print ("Filesystem bandwidth is only %s MB/s. Lowering CGHub download bandwidth to match.") \
-                      % test_bandwidth
-            max_bandwidth = test_bandwidth
-
+# If we're running in direct mode and the -S option is given, test the underlying
+# filesystem and reduce the download speed to match the filesystem
+if direct_mode and do_speedtest:
+    disk_bandwidth = disk_speedtest(final_dest)
+    if disk_bandwidth < max_bandwidth:
+        if verbose:
+            print ("Filesystem bandwidth is only %s MB/s. Lowering CGHub download bandwidth to match.") \
+                % disk_bandwidth
+        max_bandwidth = disk_bandwidth
 
 # Parse the requests file and build a list of the downloads to perform
 SourceList = list()
@@ -494,6 +503,10 @@ for bam in SourceList:
                         cached_name = final_dest
                     else:
                         cached_name = "%s/%s/%s" % (local_dir,bam.uuid,bam.name)
+                    if debug:
+                        print ("DEUBG: cached_name                 = %s") % cached_name
+                        print ("DEBUG: os.path.exists(cached_name) = %d") % os.path.exists(cached_name)
+                        print ("DEBUG: gt_process.returncode       = %d") % gt_process.returncode
                     if (gt_process.returncode == 0 and os.path.exists(cached_name)):
                         do_download = 0
                         bam.end_time = datetime.now()
