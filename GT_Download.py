@@ -499,6 +499,9 @@ for bam in SourceList:
             out = gt_process.stdout.readline()
             if out == '':
                 if gt_process.poll() != None:
+                    if debug:
+                        print ("DEBUG: gt_process.poll() != None, the gtdownload process has terminated")
+                        sys.stdout.flush()
                     if direct_mode:
                         cached_name = final_dest
                     else:
@@ -507,7 +510,10 @@ for bam in SourceList:
                         print ("DEUBG: cached_name                 = %s") % cached_name
                         print ("DEBUG: os.path.exists(cached_name) = %d") % os.path.exists(cached_name)
                         print ("DEBUG: gt_process.returncode       = %d") % gt_process.returncode
+                        sys.stdout.flush()
                     if (gt_process.returncode == 0 and os.path.exists(cached_name)):
+                        if debug:
+                            print ("DEBUG: The gtdownload process terminated normally and the file exists on disk")
                         do_download = 0
                         bam.end_time = datetime.now()
                         UpdateRequestsFile(RequestsFileName,column_names.index('analysis_id'),bam.uuid,num_columns,\
